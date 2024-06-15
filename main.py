@@ -16,7 +16,7 @@ from PyQt5.QtWidgets import (
 )
 
 from config import CONFIG
-from worker import Worker_Transfer
+from worker import Worker_Transfer, Worker_RaydiumSwap
 
 
 class HoverButton(QPushButton):
@@ -455,8 +455,6 @@ class MainWindow(QMainWindow):
                     check_box = QCheckBox()
                     check_box.setChecked(True)
                     table.setCellWidget(i, 0, check_box)
-                    amount_buy = format(amount_buy, CONFIG.DEFAULT_FORMAT)
-                    
                     table.setItem(i, 1, QTableWidgetItem(private_key))
                     table.setItem(i, 2, QTableWidgetItem(str(amount_buy)))
                     table.setItem(i, 3, QTableWidgetItem(str(amount_sell)))
@@ -615,7 +613,6 @@ class MainWindow(QMainWindow):
     def on_stop_button1_clicked(self):
         self.enable_button_1()
         self.worker_transfer.terminate()
-        self.worker_transfer.exit()
 
     # Tab 2
 
@@ -641,11 +638,52 @@ class MainWindow(QMainWindow):
     @QtCore.pyqtSlot()
     def on_start_button2_clicked(self):
         self.disable_button_2()
+        list_info_private_key = []
 
+        for i in range(self.table2.rowCount()):
+            check_box = self.table2.cellWidget(i, 0)
+            if check_box.isChecked():
+                wallet = self.table2.item(i, 1).text()
+                amount_buy = self.table2.item(i, 2).text()
+                amount_sell = self.table2.item(i, 3).text()
+                list_info_private_key.append((wallet, amount_buy, amount_sell))
+
+        token_contract = self.token_line_edit.text()
+        sleep_range_min = self.sleep_range_min_2.text()
+        sleep_range_max = self.sleep_range_max_2.text()
+
+        if not token_contract:
+            self.create_error_message("Error", "Token Contract is empty")
+            self.enable_button_2()
+            return
+        
+        if not sleep_range_min or not sleep_range_max:
+            self.create_error_message("Error", "Sleep Range is empty")
+            self.enable_button_2()
+            return
+        
+        if int(sleep_range_min) > int(sleep_range_max):
+            self.create_error_message("Error", "Sleep Range is invalid")
+            self.enable_button_2()
+            return
+        
+        self.worker_swap = Worker_RaydiumSwap(
+            list_info_private_key, token_contract, sleep_range_min, sleep_range_max, self.update_table2, self.error_signal)
+        
+        self.worker_swap.update_table_2.connect(self.update_status_table_2)
+        self.worker_swap.error_signal.connect(self._on_error)
+        self.worker_swap.finished.connect(self.on_stop_button2_clicked)
+        self.worker_swap.start()
+
+    def update_status_table_2(self, private_key: str, status: str):
+        for i in range(self.table2.rowCount()):
+            if self.table2.item(i, 1).text() == private_key:
+                self.table2.item(i, 4).setText(status)
     
     @QtCore.pyqtSlot()
     def on_stop_button2_clicked(self):
         self.enable_button_2()
+        self.worker_swap.stop_now()
 
 
 

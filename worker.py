@@ -4,10 +4,11 @@ import time
 import random
 import threading
 import traceback
+import utils
 
 from PyQt5.QtCore import QThread
 
-from helper import Transfer
+from helper import Transfer, RaydiumSwap
 from config import CONFIG
 
 
@@ -83,6 +84,96 @@ class Worker_Transfer(QThread):
             return
         print('Transfer success')
         return
+    
+
+class Worker_RaydiumSwap(QThread):
+    def __init__(self, list_info_private_key: list, swap_token_contract: str, sleep_range_min, sleep_range_max, update_table_2 = None, error_signal = None, parent = None):
+        super().__init__(parent)
+        self.list_info_private_key = list_info_private_key
+        self.swap_token_contract = swap_token_contract
+        self.sleep_range_min = sleep_range_min
+        self.sleep_range_max = sleep_range_max
+        self.update_table_2 = update_table_2
+        self.error_signal = error_signal
+        self.control_list = []
+
+    def make_swap(self, private_key: str, amount_buy: float, amount_sell: float):
+        try:
+            swap = RaydiumSwap(CONFIG.SOLANA_RPC_END_POINT, private_key, self.update_table_2)
+            # buy token
+            while True:
+                if private_key not in self.control_list:
+                    return
+                sol_balance = swap.get_sol_balance()
+                sol_balance = sol_balance / 10**9
+                # percent of sol to swap
+                amount_lamports_buy = sol_balance * int(amount_buy) / 100
+                pair_address = utils.get_pair_address(self.swap_token_contract)
+                if not pair_address:
+                    self.update_table_2.emit(private_key, 'Get pair address failed')
+                    return
+                
+                flag = swap.buy(pair_address, amount_lamports_buy)
+                if not flag:
+                    self.update_table_2.emit(private_key, 'Transaction buy error or max try reached')
+                
+                if flag == False:
+                    self.update_table_2.emit(private_key, 'Transaction buy failed')
+                    
+                elif flag == True:
+                    self.update_table_2.emit(private_key, 'Transaction buy success')
+
+                    token_balance = swap.get_token_balance(self.swap_token_contract)
+
+                    amount_lamports_sell = token_balance * int(amount_sell) / 100
+                    flag = swap.sell(pair_address, amount_lamports_sell)
+                    if not flag:
+                        self.update_table_2.emit(private_key, 'Transaction sell error or max try reached')
+                    
+                    if flag == False:
+                        self.update_table_2.emit(private_key, 'Transaction sell failed')
+                        
+                    elif flag == True:
+                        self.update_table_2.emit(private_key, 'Transaction sell success')
+
+                
+                time.sleep(random.uniform(float(self.sleep_range_min), float(self.sleep_range_max)))
+
+        except Exception as e:
+            self.update_table_2.emit(private_key, 'Swap error')
+            traceback.print_exc()
+            print('Swap error')
+            return
+        
+
+    def run(self):
+        self.threads = []
+
+        for info in self.list_info_private_key:
+            private_key = info[0]
+            amount_buy = info[1]
+            amount_sell = info[2]
+
+            self.update_table_2.emit(private_key, 'Processing')
+            self.control_list.append(private_key)
+            t = threading.Thread(
+                target=self.make_swap,
+                args=(private_key, amount_buy, amount_sell)
+            )
+            
+            t.start()
+            self.threads.append(t)
+            time.sleep(random.uniform(float(self.sleep_range_min), float(self.sleep_range_max)))
+
+        for t in self.threads:
+            t.join()
+
+        print('Worker Raydium Swap finished')
+
+    
+    def stop_now(self):
+        self.control_list.clear()
+
 
 
 

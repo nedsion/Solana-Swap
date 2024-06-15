@@ -2,8 +2,10 @@ import json
 import time
 import threading
 import requests
-from config import RPC, PUB_KEY, client
+import traceback
+# from config import RPC, PUB_KEY, client
 # from constants import OPEN_BOOK_PROGRAM, RAY_AUTHORITY_V4, RAY_V4, TOKEN_PROGRAM_ID, WSOL
+from config import CONFIG
 from constants import CONSTANTS
 from layouts import LIQUIDITY_STATE_LAYOUT_V4, MARKET_STATE_LAYOUT_V3, SWAP_LAYOUT, OPEN_ORDERS_LAYOUT
 from solana.rpc.types import TokenAccountOpts
@@ -47,7 +49,7 @@ def make_swap_instruction(amount_in: int, token_account_in: Pubkey, token_accoun
     except:
         return None
 
-def get_token_account(owner: Pubkey, mint: Pubkey):
+def get_token_account(client, owner: Pubkey, mint: Pubkey):
     try:
         account_data = client.get_token_accounts_by_owner(owner, TokenAccountOpts(mint))
         token_account = account_data.value[0].pubkey
@@ -58,7 +60,7 @@ def get_token_account(owner: Pubkey, mint: Pubkey):
         token_account_instructions = create_associated_token_account(owner, owner, mint)
         return token_account, token_account_instructions
 
-def fetch_pool_keys(pair_address: str) -> dict:
+def fetch_pool_keys(client, pair_address: str) -> dict:
     try:
         amm_id = Pubkey.from_string(pair_address)
         amm_data = client.get_account_info_json_parsed(amm_id).value.data
@@ -121,7 +123,7 @@ def find_data(data: dict, field: str) -> str:
                 return result
     return None
 
-def get_token_balance(token_address: str) -> float:
+def get_token_balance(pub_key, token_address: str) -> float:
     try:
 
         headers = {"accept": "application/json", "content-type": "application/json"}
@@ -131,19 +133,20 @@ def get_token_balance(token_address: str) -> float:
             "jsonrpc": "2.0",
             "method": "getTokenAccountsByOwner",
             "params": [
-                PUB_KEY,
+                pub_key,
                 {"mint": token_address},
                 {"encoding": "jsonParsed"},
             ],
         }
         
-        response = requests.post(RPC, json=payload, headers=headers)
+        response = requests.post(CONFIG.SOLANA_RPC_END_POINT, json=payload, headers=headers)
         ui_amount = find_data(response.json(), "uiAmount")
         return float(ui_amount)
     except:
+        traceback.print_exc()
         return None
 
-def get_token_balance_lamports(token_address: str) -> int:
+def get_token_balance_lamports(pub_key, token_address: str) -> int:
     try:
 
         headers = {"accept": "application/json", "content-type": "application/json"}
@@ -153,43 +156,46 @@ def get_token_balance_lamports(token_address: str) -> int:
             "jsonrpc": "2.0",
             "method": "getTokenAccountsByOwner",
             "params": [
-                PUB_KEY,
+                pub_key,
                 {"mint": token_address},
                 {"encoding": "jsonParsed"},
             ],
         }
         
-        response = requests.post(RPC, json=payload, headers=headers)
+        response = requests.post(CONFIG.SOLANA_RPC_END_POINT, json=payload, headers=headers)
         amount = find_data(response.json(), "amount")
         return int(amount)
     except:
         return None
 
-def confirm_txn(txn_sig: Signature, max_retries: int = 50, retry_interval: int = 3) -> bool:
-    retries = 0
-    client.confirm_transaction(txn_sig, sleep_seconds=3)
-    while retries < max_retries:
-        try:
-            txn_res = client.get_transaction(txn_sig, encoding="json", commitment="confirmed", max_supported_transaction_version=0)
-            txn_json = json.loads(txn_res.value.transaction.meta.to_json())
-            
-            if txn_json['err'] is None:
-                print("Transaction confirmed... try count:", retries)
-                return True
-            
-            print("Error: Transaction not confirmed. Retrying...")
-            if txn_json['err']:
-                print("Transaction failed.")
-                return False
-        except Exception as e:
-            print("Awaiting confirmation... try count:", retries)
-            retries += 1
-            time.sleep(retry_interval)
-    
-    print("Max retries reached. Transaction confirmation failed.")
-    return None
+def confirm_txn(client, txn_sig: Signature, max_retries: int = 50, retry_interval: int = 3) -> bool:
+    try:
+        retries = 0
+        client.confirm_transaction(txn_sig, sleep_seconds=3)
+        while retries < max_retries:
+            try:
+                txn_res = client.get_transaction(txn_sig, encoding="json", commitment="confirmed", max_supported_transaction_version=0)
+                txn_json = json.loads(txn_res.value.transaction.meta.to_json())
+                
+                if txn_json['err'] is None:
+                    print("Transaction confirmed... try count:", retries)
+                    return True
+                
+                print("Error: Transaction not confirmed. Retrying...")
+                if txn_json['err']:
+                    print("Transaction failed.")
+                    return False
+            except Exception as e:
+                print("Awaiting confirmation... try count:", retries)
+                retries += 1
+                time.sleep(retry_interval)
+        
+        print("Max retries reached. Transaction confirmation failed.")
+        return None
+    except:
+        return None
 
-def get_pair_address_from_rpc(token_address: str) -> str:
+def get_pair_address_from_rpc(client, token_address: str) -> str:
     BASE_OFFSET = 400
     QUOTE_OFFSET = 432
     DATA_LENGTH_FILTER = 752
@@ -221,25 +227,28 @@ def get_pair_address_from_rpc(token_address: str) -> str:
     return pair_address
 
 def get_pair_address(token_address) -> str:
-    url = f"https://api.dexscreener.com/latest/dex/search?q={token_address}"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
-        "Accept": "*/*",
-        "Accept-Language": "en-US,en;q=0.5",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Connection": "keep-alive",
-        "Sec-Fetch-Dest": "empty",
-        "Sec-Fetch-Mode": "cors",
-        "Sec-Fetch-Site": "cross-site"
-    }
+    try:
+        url = f"https://api.dexscreener.com/latest/dex/search?q={token_address}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
+            "Accept": "*/*",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Connection": "keep-alive",
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "cross-site"
+        }
 
-    response = requests.get(url, headers=headers)
-    if response.status_code == 200:
-        return response.json()['pairs'][0]['pairAddress']
-    else:
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            return response.json()['pairs'][0]['pairAddress']
+        else:
+            return None
+    except:
         return None
 
-def get_token_price(pair_address: str) -> float:
+def get_token_price(client, pair_address: str) -> float:
     try:
         # Get AMM data and parse
         amm_pubkey = Pubkey.from_string(pair_address)
@@ -314,3 +323,8 @@ def get_token_price(pair_address: str) -> float:
 
     except:
         return None
+    
+
+
+if __name__ == '__main__':
+    print(get_token_balance('GPTKCGU7cq2ejWQq4trj2FhWW18icsGXsuojjFGoW4ZN', 'So11111111111111111111111111111111111111112'))
