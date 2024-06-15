@@ -52,7 +52,7 @@ class Worker_Transfer(QThread):
             self.update_table_1.emit(to_private_key, 'Processing')
             t = threading.Thread(
                 target=self.transfer_to_each_wallet,
-                args=(self.main_private_key, to_private_key, amount)
+                args=(to_private_key, amount)
             )
             t.start()
             threads.append(t)
@@ -65,11 +65,11 @@ class Worker_Transfer(QThread):
         print('Worker Transfer finished')
     
 
-    def transfer_to_each_wallet(self, main_private_key: str, to_private_key: str, amount: float):
+    def transfer_to_each_wallet(self, to_private_key: str, amount: float):
         try:
-            transfer = Transfer(CONFIG.SOLANA_RPC_END_POINT)
-            to_address = transfer.get_pubkey(to_private_key)
-            flag = transfer.transfer_sol(main_private_key, to_address, amount)
+            transfer = Transfer(CONFIG.SOLANA_RPC_END_POINT, self.update_table_1)
+
+            flag = transfer.transfer_sol(self.main_private_key, to_private_key, amount)
             if flag == False:
                 self.update_table_1.emit(to_private_key, 'Failed')
                 return
@@ -83,3 +83,10 @@ class Worker_Transfer(QThread):
             return
         print('Transfer success')
         return
+
+
+
+if __name__ == '__main__':
+    worker = Transfer()
+    private_key = '37v4xuhNFhgzSevL6xr84JjHMEUErirYvLvdKedaK2rYRdvjC35Dpm6RKRBWRq2xLnCmWxxaWE6gmi4BrDPa7PWY'
+    worker.transfer_sol(private_key)
