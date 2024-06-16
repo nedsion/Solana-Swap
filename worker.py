@@ -58,8 +58,6 @@ class Worker_Transfer(QThread):
             t.start()
             threads.append(t)
 
-            time.sleep(random.uniform(float(self.sleep_range_min), float(self.sleep_range_max)))
-
         for t in threads:
             t.join()
 
