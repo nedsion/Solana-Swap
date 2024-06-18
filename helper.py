@@ -100,7 +100,7 @@ class Transfer:
             print('-'*50)
             response = self.client.send_transaction(transaction, key_pair)
             print('Response:', response.value)
-            data = self.client.confirm_transaction(response.value, sleep_seconds = 1)
+            data = self.client.confirm_transaction(response.value, sleep_seconds = 3)
             print('Confirm Response:', data)
             print("Time taken:", time.time() - st)
             return True
