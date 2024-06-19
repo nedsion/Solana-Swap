@@ -130,6 +130,7 @@ class RaydiumSwap:
             return balance.value
         
         except Exception as e:
+            traceback.print_exc()
             return False
         
     def get_pubkey(self) -> str:
@@ -140,6 +141,7 @@ class RaydiumSwap:
         try:
             key_pair = Keypair.from_base58_string(self.private_key)
             token_amount = get_token_balance_lamports(str(key_pair.pubkey()), mint)
+            print('Token Amount:', token_amount)
             return token_amount
         
         except Exception as e:
@@ -229,7 +231,7 @@ class RaydiumSwap:
             # Create and send transaction
             print("Creating and sending transaction...")
             transaction = VersionedTransaction(compiled_message, [self.key_pair, wsol_account_keypair])
-            txn_sig = self.client.send_transaction(transaction, opts=TxOpts(skip_preflight=True, preflight_commitment="confirmed")).value
+            txn_sig = self.client.send_transaction(transaction, opts=TxOpts(skip_preflight=False, preflight_commitment="confirmed")).value
             print("Transaction Signature:", txn_sig)
             
             # Confirm transaction
@@ -297,7 +299,7 @@ class RaydiumSwap:
             # Create and send transaction
             print("Creating and sending transaction...")
             transaction = VersionedTransaction(compiled_message, [self.key_pair])
-            txn_sig = self.client.send_transaction(transaction, opts=TxOpts(skip_preflight=True, preflight_commitment="confirmed")).value
+            txn_sig = self.client.send_transaction(transaction, opts=TxOpts(skip_preflight=False, preflight_commitment="confirmed")).value
             print("Transaction Signature:", txn_sig)
             
             # Confirm transaction

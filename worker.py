@@ -104,7 +104,12 @@ class Worker_RaydiumSwap(QThread):
             while True:
                 if private_key not in self.control_list:
                     return
-                sol_balance = swap.get_sol_balance()
+                for _ in range(10):
+                    sol_balance = swap.get_sol_balance()
+                    if sol_balance != None:
+                        break
+                    time.sleep(3)
+
                 sol_balance = sol_balance / 10**9
                 # percent of sol to swap
                 amount_lamports_buy = sol_balance * int(amount_buy) / 100
@@ -113,28 +118,55 @@ class Worker_RaydiumSwap(QThread):
                     self.update_table_2.emit(private_key, 'Get pair address failed')
                     return
                 
-                flag = swap.buy(pair_address, amount_lamports_buy)
-                if not flag:
-                    self.update_table_2.emit(private_key, 'Transaction buy error or max try reached')
-                
-                if flag == False:
-                    self.update_table_2.emit(private_key, 'Transaction buy failed')
-                    
-                elif flag == True:
-                    self.update_table_2.emit(private_key, 'Transaction buy success')
-
-                    token_balance = swap.get_token_balance(self.swap_token_contract)
-
-                    amount_lamports_sell = token_balance * int(amount_sell) / 100
-                    flag = swap.sell(pair_address, amount_lamports_sell)
+                self.update_table_2.emit(private_key, 'Processing buy')
+                for _ in range(10):
+                    flag = swap.buy(pair_address, amount_lamports_buy)
                     if not flag:
-                        self.update_table_2.emit(private_key, 'Transaction sell error or max try reached')
+                        self.update_table_2.emit(private_key, 'Transaction buy error or max try reached retrying...')
                     
                     if flag == False:
-                        self.update_table_2.emit(private_key, 'Transaction sell failed')
+                        self.update_table_2.emit(private_key, 'Transaction buy failed retrying...')
+                    
+                    if flag == True:
+                        break
+
+                if flag != True:
+                    self.update_table_2.emit(private_key, 'Transaction buy to many failed stop!!!')
+                    return
+                    
+                if flag == True:
+                    self.update_table_2.emit(private_key, 'Transaction buy success')
+
+                    time.sleep(5)
+
+                    self.update_table_2.emit(private_key, 'Processing sell')
+
+                    for _ in range(10):
+                        token_balance = swap.get_token_balance(self.swap_token_contract)
+                        if token_balance != None:
+                            if token_balance != 0:
+                                break
+
+                        time.sleep(3)
+
+
+                    amount_lamports_sell = token_balance * int(amount_sell) / 100
+                    
+                    for _ in range(10):
+                        flag = swap.sell(pair_address, amount_lamports_sell)
+                        if not flag:
+                            self.update_table_2.emit(private_key, 'Transaction sell error or max try reached retrying...')
                         
-                    elif flag == True:
-                        self.update_table_2.emit(private_key, 'Transaction sell success')
+                        if flag == False:
+                            self.update_table_2.emit(private_key, 'Transaction sell failed retrying...')
+                            
+                        elif flag == True:
+                            self.update_table_2.emit(private_key, 'Transaction sell success')
+                            break
+
+                    if flag != True:
+                        self.update_table_2.emit(private_key, 'Transaction to many failed stop!!!')
+                        return
 
                 
                 time.sleep(random.uniform(float(self.sleep_range_min), float(self.sleep_range_max)))

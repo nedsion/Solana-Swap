@@ -166,16 +166,18 @@ def get_token_balance_lamports(pub_key, token_address: str) -> int:
         amount = find_data(response.json(), "amount")
         return int(amount)
     except:
+        traceback.print_exc()
         return None
 
-def confirm_txn(client, txn_sig: Signature, max_retries: int = 50, retry_interval: int = 3) -> bool:
+def confirm_txn(client, txn_sig: Signature, max_retries: int = 10, retry_interval: int = 10) -> bool:
     try:
         retries = 0
-        client.confirm_transaction(txn_sig, sleep_seconds=3)
         while retries < max_retries:
             try:
                 txn_res = client.get_transaction(txn_sig, encoding="json", commitment="confirmed", max_supported_transaction_version=0)
                 txn_json = json.loads(txn_res.value.transaction.meta.to_json())
+
+                print(txn_json)
                 
                 if txn_json['err'] is None:
                     print("Transaction confirmed... try count:", retries)
@@ -186,6 +188,7 @@ def confirm_txn(client, txn_sig: Signature, max_retries: int = 50, retry_interva
                     print("Transaction failed.")
                     return False
             except Exception as e:
+                traceback.print_exc()
                 print("Awaiting confirmation... try count:", retries)
                 retries += 1
                 time.sleep(retry_interval)
