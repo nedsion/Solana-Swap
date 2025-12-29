@@ -12,7 +12,8 @@ from PyQt5.QtGui import QPainter
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
-    QPushButton, QLineEdit, QLabel, QFileDialog, QComboBox, QTabWidget, QHeaderView, QStyleOptionButton, QStyle, QCheckBox, QMenu, QAction, QMessageBox, QRadioButton
+    QPushButton, QLineEdit, QLabel, QFileDialog, QComboBox, QTabWidget, QHeaderView, QStyleOptionButton,
+    QStyle, QCheckBox, QMenu, QAction, QMessageBox, QRadioButton, QButtonGroup
 )
 
 from config import CONFIG
@@ -216,6 +217,45 @@ class MainWindow(QMainWindow):
         options_layout.addLayout(qhbox)
         options_layout.addLayout(qhbox3)
 
+
+        # transfer SOL or SPL tokens
+        self.transfer_type_label = QLabel("Transfer Type:")
+        self.sol_radio_button = QRadioButton("SOL")
+        self.spl_radio_button = QRadioButton("SPL Token")
+        self.sol_radio_button.setChecked(True)
+
+        # from main wallet to other wallets or from other wallets to main wallet
+        self.transfer_from_layout = QHBoxLayout()
+        group = QButtonGroup(self)
+        self.transfer_from_label = QLabel("Transfer From:")
+        self.transfer_from_main_wallet = QRadioButton("Main Wallet")
+        self.transfer_from_other_wallet = QRadioButton("Other Wallets")
+        group.addButton(self.transfer_from_main_wallet)
+        group.addButton(self.transfer_from_other_wallet)
+        self.transfer_from_main_wallet.setChecked(True)
+
+        # on transfer from other wallets clicked event, change all amount to 'ALL'
+        self.transfer_from_other_wallet.clicked.connect(lambda: self.on_transfer_from_other_wallet_clicked(self.table1))
+        # on transfer from main wallet clicked event, change all amount to '0'
+        self.transfer_from_main_wallet.clicked.connect(lambda: self.on_transfer_from_other_wallet_clicked(self.table1))
+
+        # on spl radio button clicked event, generate the token line edit
+        self.token_contract_input = QLineEdit()
+        self.token_contract_input.setPlaceholderText("Token Contract")
+        self.token_contract_input.setDisabled(True)
+        self.spl_radio_button.clicked.connect(lambda: self.token_contract_input.setDisabled(False))
+        self.sol_radio_button.clicked.connect(lambda: self.token_contract_input.setDisabled(True))
+
+        options_layout.addWidget(self.transfer_type_label)
+        options_layout.addWidget(self.sol_radio_button)
+        options_layout.addWidget(self.spl_radio_button)
+        
+        options_layout.addWidget(self.transfer_from_label)
+        options_layout.addWidget(self.transfer_from_main_wallet)
+        options_layout.addWidget(self.transfer_from_other_wallet)
+
+        options_layout.addWidget(self.token_contract_input)
+
         # Buttons
         button_layout = QHBoxLayout()
         self.start_button1 = HoverButton("Start")
@@ -240,6 +280,14 @@ class MainWindow(QMainWindow):
         layout.addLayout(button_layout)
 
         self.tab1.setLayout(layout)
+
+    def on_transfer_from_other_wallet_clicked(self, table):
+        if self.transfer_from_other_wallet.isChecked():
+            for i in range(table.rowCount()):
+                table.item(i, 2).setText("ALL")
+        else:
+            # load the amount from the file
+            self.on_file_line_edit_changed(table, self.file_line_edit.text(), 1)
 
     def initTab2(self):
         layout = QVBoxLayout()
@@ -596,12 +644,30 @@ class MainWindow(QMainWindow):
             self.enable_button_1()
             return
         
-        self.worker_transfer = Worker_Transfer(
-            list_info_private_key, main_private_key, sleep_range_min, sleep_range_max, self.update_table1, self.error_signal)
-        self.worker_transfer.update_table_1.connect(self.update_status_table_1)
-        self.worker_transfer.error_signal.connect(self._on_error)
-        self.worker_transfer.finished.connect(self.on_stop_button1_clicked)
-        self.worker_transfer.start()
+        is_transfer_sol = self.sol_radio_button.isChecked()
+        is_from_main_wallet = self.transfer_from_main_wallet.isChecked()        
+
+        if is_transfer_sol:
+            self.worker_transfer = Worker_Transfer(
+                list_info_private_key, main_private_key, sleep_range_min, sleep_range_max, is_transfer_sol, is_from_main_wallet, None, self.update_table1, self.error_signal)
+            self.worker_transfer.update_table_1.connect(self.update_status_table_1)
+            self.worker_transfer.error_signal.connect(self._on_error)
+            self.worker_transfer.finished.connect(self.on_stop_button1_clicked)
+            self.worker_transfer.start()
+        else:
+            token_contract = self.token_contract_input.text()
+            if not token_contract:
+                self.create_error_message("Error", "Token Contract is empty")
+                self.enable_button_1()
+                return
+
+            self.worker_transfer = Worker_Transfer(
+                list_info_private_key, main_private_key, sleep_range_min, sleep_range_max, is_transfer_sol, is_from_main_wallet, token_contract, self.update_table1, self.error_signal)
+            self.worker_transfer.update_table_1.connect(self.update_status_table_1)
+            self.worker_transfer.error_signal.connect(self._on_error)
+            self.worker_transfer.finished.connect(self.on_stop_button1_clicked)
+            self.worker_transfer.start()
+            
 
     def update_status_table_1(self, private_key: str, status: str):
         for i in range(self.table1.rowCount()):

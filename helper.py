@@ -16,13 +16,13 @@ from solders.transaction import VersionedTransaction #type: ignore
 from solders.message import MessageV0 #type: ignore
 from spl.token.client import Token
 from spl.token.constants import WRAPPED_SOL_MINT
-from spl.token.instructions import close_account, CloseAccountParams
+from spl.token.instructions import close_account, CloseAccountParams, transfer_checked, get_associated_token_address, TransferCheckedParams
 import spl.token.instructions as spl_token_instructions
 
 from config import CONFIG
 from constants import CONSTANTS
 from layouts import ACCOUNT_LAYOUT
-from utils import fetch_pool_keys, make_swap_instruction, get_token_account, confirm_txn, get_token_balance_lamports
+from utils import fetch_pool_keys, make_swap_instruction, get_token_account, confirm_txn, get_token_balance_lamports, get_recent_prioritization_fees, get_token_price
 
 
 class Transfer:
@@ -47,7 +47,8 @@ class Transfer:
         except Exception as e:
             return False
     
-    def transfer_sol(self, private_key, to_private_key: str, amounts: float):
+    
+    def transfer_sol(self, private_key: str, to_private_key: str, amounts: float):
         try:
             st = time.time()
             key_pair = Keypair.from_base58_string(private_key)
@@ -84,8 +85,9 @@ class Transfer:
                 data = self.client.confirm_transaction(fund_response.value, sleep_seconds = 1)
                 print('Fund Response:', data)
 
-
             # Transfer SOL to the recipient
+            transfer_fee = 5000 
+            amounts -= transfer_fee
             transfer_params = TransferParams(
                 from_pubkey=key_pair.pubkey(),
                 to_pubkey=to_pubkey,
@@ -95,6 +97,7 @@ class Transfer:
             recent_blockhash_response = self.client.get_latest_blockhash()
             recent_blockhash = recent_blockhash_response.value.blockhash
 
+            
             transaction = Transaction(recent_blockhash=recent_blockhash).add(transfer(transfer_params))
             print('Transaction:', transaction)
             print('-'*50)
@@ -105,6 +108,76 @@ class Transfer:
             print("Time taken:", time.time() - st)
             return True
         
+        except Exception as e:
+            traceback.print_exc()
+            return False
+        
+    def get_token_balance(self, private_key: str, mint: str) -> int:
+        try:
+            print('Getting token balance...')
+            print('Private Key:', private_key)
+            print('Mint:', mint)
+            key_pair = Keypair.from_base58_string(private_key)
+            token_amount = get_token_balance_lamports(str(key_pair.pubkey()), mint)
+
+            return token_amount
+        
+        except Exception as e:
+            traceback.print_exc()
+            return False
+
+    def transfer_token(self, private_key: str, to_private_key: str, mint: str, amounts: float):
+        try:
+            st = time.time()
+            from_wallet = Keypair.from_base58_string(private_key)
+            to_wallet = Keypair.from_base58_string(to_private_key)
+            
+            balance = self.get_token_balance(private_key, mint)
+
+            if balance < amounts:
+                print("Balance is not enough")
+                return False
+
+            token = Token(self.client, Pubkey.from_string(mint), CONSTANTS.TOKEN_PROGRAM_ID, from_wallet)
+
+            mint_info = token.get_mint_info()
+
+            decimals = mint_info.decimals
+            amounts = int(amounts * (10 ** decimals))
+
+                # Get or create the associated token account for the sender
+            sender_token_account = get_associated_token_address(from_wallet.pubkey(), Pubkey.from_string(mint))
+            sender_account_info = self.client.get_account_info(sender_token_account)
+            if sender_account_info.value is None:
+                token.create_associated_token_account(from_wallet.pubkey())
+
+            # Get or create the associated token account for the recipient
+            recipient_token_account = get_associated_token_address(to_wallet.pubkey(), Pubkey.from_string(mint))
+            recipient_account_info = self.client.get_account_info(recipient_token_account)
+            if recipient_account_info.value is None:
+                token.create_associated_token_account(to_wallet.pubkey())
+
+            # Prepare the transfer_checked parameters
+            params = TransferCheckedParams(
+                program_id=CONSTANTS.TOKEN_PROGRAM_ID,      # Token program ID
+                source=sender_token_account,      # Source account
+                mint=Pubkey.from_string(mint),                 # Token mint address
+                dest=recipient_token_account,     # Destination account
+                owner=from_wallet.pubkey(),       # Owner of source account
+                amount=amounts,                   # Amount to transfer
+                decimals=decimals,                # Token decimals
+                signers=[from_wallet.pubkey()]    # Signers
+            )
+
+            # Prepare transaction with transfer_checked
+            transaction = Transaction().add(transfer_checked(params))
+
+            # Send transaction
+            response = self.client.send_transaction(transaction, from_wallet)
+            confirm = self.client.confirm_transaction(response.value, sleep_seconds = 3)
+            print('Confirm Response:', confirm)
+            print("Time taken:", time.time() - st)
+            
         except Exception as e:
             traceback.print_exc()
             return False
@@ -146,6 +219,38 @@ class RaydiumSwap:
         
         except Exception as e:
             return False
+        
+
+    def get_token_price(self, pair_address: str, amount_token_in: int) -> float:
+        """
+        Returns the price of the tokens in SOL
+        """
+        try:
+            token_price_on_sol = get_token_price(self.client, pair_address)
+            if token_price_on_sol is None:
+                return None
+            
+            return token_price_on_sol * amount_token_in
+            
+
+        except Exception as e:
+            traceback.print_exc()
+            return False
+        
+
+    def calculate_token_from_sol(self, pair_address: str, amount_in_sol: float) -> float:
+        try:
+            token_price_on_sol = get_token_price(self.client, pair_address)
+            if token_price_on_sol is None:
+                return None
+            
+            return amount_in_sol / token_price_on_sol
+            
+            
+        except Exception as e:
+            traceback.print_exc()
+            return False
+    
 
     def buy(self, pair_address: str, amount_in_sol: float):
         try:
@@ -231,7 +336,7 @@ class RaydiumSwap:
             # Create and send transaction
             print("Creating and sending transaction...")
             transaction = VersionedTransaction(compiled_message, [self.key_pair, wsol_account_keypair])
-            txn_sig = self.client.send_transaction(transaction, opts=TxOpts(skip_preflight=False, preflight_commitment="confirmed")).value
+            txn_sig = self.client.send_transaction(transaction, opts=TxOpts(skip_preflight=True, preflight_commitment="processed", max_retries=10)).value
             print("Transaction Signature:", txn_sig)
             
             # Confirm transaction
@@ -299,7 +404,7 @@ class RaydiumSwap:
             # Create and send transaction
             print("Creating and sending transaction...")
             transaction = VersionedTransaction(compiled_message, [self.key_pair])
-            txn_sig = self.client.send_transaction(transaction, opts=TxOpts(skip_preflight=False, preflight_commitment="confirmed")).value
+            txn_sig = self.client.send_transaction(transaction, opts=TxOpts(skip_preflight=True, preflight_commitment="confirmed", max_retries=10)).value
             print("Transaction Signature:", txn_sig)
             
             # Confirm transaction
@@ -316,9 +421,26 @@ class RaydiumSwap:
 
 if __name__ == '__main__':
     transfers = Transfer(CONFIG.SOLANA_RPC_END_POINT)
-    private_key = '37v4xuhNFhgzSevL6xr84JjHMEUErirYvLvdKedaK2rYRdvjC35Dpm6RKRBWRq2xLnCmWxxaWE6gmi4BrDPa7PWY'
-    mint = '667w6y7eH5tQucYQXfJ2KmiuGBE8HfYnqqbjLNSw7yww'
+    private_key = 'oiSvbPA5HT3Wn9CnxEwNcckw3QVhgvNvCs6SMk4TrdquEyEg3UVqadcgE5LEWaZuBkxLcyZFHCHTmuhnm6VW1D3'
+    to_private_key = '3JRUKrrfxNsdsKkLvveEtnY4dAYFv5qxpSUNbcePbH4xNd5g1r5nihKpsj6Y5orkfPjjER6xJ84VEj9dctwJ98UK'
+    mint = 'Hbqe8GJ6pM6roBGfK7bFHPajnEeX8gk9DYeQXu8gGDQF'
+
+
+    # transfers.transfer_token(private_key, to_private_key, mint, 0.1)
+
     swap = RaydiumSwap(CONFIG.SOLANA_RPC_END_POINT, private_key)
-    print(swap.get_sol_balance())
-    print(swap.get_token_balance(mint))
+    # price = swap.get_token_price('9iL89qfbTMWygtawzGikL2j6ASbRYX7XSM5ePUcoQ5fk', 5)
+    # print(price)
+    # # 8.345265247423214e-05 to real value
+    # decimal_form = format(price, '.20f')
+    # print(decimal_form)
+
+    amount_token = swap.calculate_token_from_sol('9iL89qfbTMWygtawzGikL2j6ASbRYX7XSM5ePUcoQ5fk', 5)
+    print(type(amount_token))
+
+
+
+    # swap = RaydiumSwap(CONFIG.SOLANA_RPC_END_POINT, private_key)
+    # print(swap.get_sol_balance())
+    # print(swap.get_token_balance(mint))
     

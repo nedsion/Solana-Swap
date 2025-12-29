@@ -1,3 +1,5 @@
 __pycache__
 .venv
 output
+_test.py
+*.csv

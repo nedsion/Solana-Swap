@@ -15,7 +15,7 @@ class Config:
         with open(CONFIG_PATH, 'r') as file:
             DEFAULT_CONFIG = json.load(file)
 
-    SOLANA_RPC_END_POINT = 'https://api.mainnet-beta.solana.com'
+    SOLANA_RPC_END_POINT = 'https://mainnet.helius-rpc.com/?api-key=86e76293-b0c2-419c-9221-ec374b14b653' # https://api.devnet.solana.com / https://api.mainnet-beta.solana.com / https://orbital-silent-slug.solana-mainnet.quiknode.pro/73978626e2fc1f198ababefcd71853c39abf3065/
     DEFAULT_FORMAT = '.10f'
 
     

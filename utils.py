@@ -15,29 +15,48 @@ from solders.pubkey import Pubkey  # type: ignore
 from spl.token.instructions import create_associated_token_account, get_associated_token_address
 from solana.rpc.types import TokenAccountOpts, MemcmpOpts
 
+
 def make_swap_instruction(amount_in: int, token_account_in: Pubkey, token_account_out: Pubkey, accounts: dict, owner: Pubkey) -> Instruction:
     try:
         keys = [
-            AccountMeta(pubkey=CONSTANTS.TOKEN_PROGRAM_ID, is_signer=False, is_writable=False),
-            AccountMeta(pubkey=accounts["amm_id"], is_signer=False, is_writable=True),
-            AccountMeta(pubkey=accounts["authority"], is_signer=False, is_writable=False),
-            AccountMeta(pubkey=accounts["open_orders"], is_signer=False, is_writable=True),
-            AccountMeta(pubkey=accounts["target_orders"], is_signer=False, is_writable=True),
-            AccountMeta(pubkey=accounts["base_vault"], is_signer=False, is_writable=True),
-            AccountMeta(pubkey=accounts["quote_vault"], is_signer=False, is_writable=True),
-            AccountMeta(pubkey=CONSTANTS.OPEN_BOOK_PROGRAM, is_signer=False, is_writable=False), 
-            AccountMeta(pubkey=accounts["market_id"], is_signer=False, is_writable=True),
-            AccountMeta(pubkey=accounts["bids"], is_signer=False, is_writable=True),
-            AccountMeta(pubkey=accounts["asks"], is_signer=False, is_writable=True),
-            AccountMeta(pubkey=accounts["event_queue"], is_signer=False, is_writable=True),
-            AccountMeta(pubkey=accounts["market_base_vault"], is_signer=False, is_writable=True),
-            AccountMeta(pubkey=accounts["market_quote_vault"], is_signer=False, is_writable=True),
-            AccountMeta(pubkey=accounts["market_authority"], is_signer=False, is_writable=False),
-            AccountMeta(pubkey=token_account_in, is_signer=False, is_writable=True),  
-            AccountMeta(pubkey=token_account_out, is_signer=False, is_writable=True), 
-            AccountMeta(pubkey=owner.pubkey(), is_signer=True, is_writable=False) 
+            AccountMeta(pubkey=CONSTANTS.TOKEN_PROGRAM_ID,
+                        is_signer=False, is_writable=False),
+            AccountMeta(pubkey=accounts["amm_id"],
+                        is_signer=False, is_writable=True),
+            AccountMeta(pubkey=accounts["authority"],
+                        is_signer=False, is_writable=False),
+            AccountMeta(pubkey=accounts["open_orders"],
+                        is_signer=False, is_writable=True),
+            AccountMeta(pubkey=accounts["target_orders"],
+                        is_signer=False, is_writable=True),
+            AccountMeta(pubkey=accounts["base_vault"],
+                        is_signer=False, is_writable=True),
+            AccountMeta(pubkey=accounts["quote_vault"],
+                        is_signer=False, is_writable=True),
+            AccountMeta(pubkey=CONSTANTS.OPEN_BOOK_PROGRAM,
+                        is_signer=False, is_writable=False),
+            AccountMeta(pubkey=accounts["market_id"],
+                        is_signer=False, is_writable=True),
+            AccountMeta(pubkey=accounts["bids"],
+                        is_signer=False, is_writable=True),
+            AccountMeta(pubkey=accounts["asks"],
+                        is_signer=False, is_writable=True),
+            AccountMeta(pubkey=accounts["event_queue"],
+                        is_signer=False, is_writable=True),
+            AccountMeta(pubkey=accounts["market_base_vault"],
+                        is_signer=False, is_writable=True),
+            AccountMeta(
+                pubkey=accounts["market_quote_vault"], is_signer=False, is_writable=True),
+            AccountMeta(pubkey=accounts["market_authority"],
+                        is_signer=False, is_writable=False),
+            AccountMeta(pubkey=token_account_in,
+                        is_signer=False, is_writable=True),
+            AccountMeta(pubkey=token_account_out,
+                        is_signer=False, is_writable=True),
+            AccountMeta(pubkey=owner.pubkey(),
+                        is_signer=True, is_writable=False)
         ]
-        
+
         data = SWAP_LAYOUT.build(
             dict(
                 instruction=9,
@@ -49,16 +68,20 @@ def make_swap_instruction(amount_in: int, token_account_in: Pubkey, token_accoun
     except:
         return None
 
+
 def get_token_account(client, owner: Pubkey, mint: Pubkey):
     try:
-        account_data = client.get_token_accounts_by_owner(owner, TokenAccountOpts(mint))
+        account_data = client.get_token_accounts_by_owner(
+            owner, TokenAccountOpts(mint))
         token_account = account_data.value[0].pubkey
         token_account_instructions = None
         return token_account, token_account_instructions
     except:
         token_account = get_associated_token_address(owner, mint)
-        token_account_instructions = create_associated_token_account(owner, owner, mint)
+        token_account_instructions = create_associated_token_account(
+            owner, owner, mint)
         return token_account, token_account_instructions
+
 
 def fetch_pool_keys(client, pair_address: str) -> dict:
     try:
@@ -102,11 +125,17 @@ def fetch_pool_keys(client, pair_address: str) -> dict:
             "event_queue": Pubkey.from_bytes(market_decoded.event_queue),
             "pool_open_time": amm_data_decoded.poolOpenTime
         }
+
         
+
         return pool_keys
-    except:
+    except Exception as e:
+        print(e)
+        
         return None
     
+
+
 def find_data(data: dict, field: str) -> str:
     if isinstance(data, dict):
         if field in data:
@@ -123,10 +152,12 @@ def find_data(data: dict, field: str) -> str:
                 return result
     return None
 
+
 def get_token_balance(pub_key, token_address: str) -> float:
     try:
 
-        headers = {"accept": "application/json", "content-type": "application/json"}
+        headers = {"accept": "application/json",
+                   "content-type": "application/json"}
 
         payload = {
             "id": 1,
@@ -138,18 +169,47 @@ def get_token_balance(pub_key, token_address: str) -> float:
                 {"encoding": "jsonParsed"},
             ],
         }
-        
-        response = requests.post(CONFIG.SOLANA_RPC_END_POINT, json=payload, headers=headers)
+
+        response = requests.post(
+            CONFIG.SOLANA_RPC_END_POINT, json=payload, headers=headers)
         ui_amount = find_data(response.json(), "uiAmount")
         return float(ui_amount)
     except:
         traceback.print_exc()
         return None
 
+
+# getRecentPrioritizationFees
+def get_recent_prioritization_fees(pub_key: str, recent_blockhash) -> dict:
+    try:
+        headers = {
+            "accept": "application/json",
+            "content-type": "application/json"
+        }
+
+        payload = {
+            "jsonrpc":"2.0", "id":1,
+            "method": "getRecentPrioritizationFees",
+            "params": [
+                [pub_key]
+            ]
+        }
+
+        response = requests.post(
+            CONFIG.SOLANA_RPC_END_POINT, json=payload, headers=headers)
+
+        results = response.json()['result']
+        for result in results:
+            if result['slot'] == recent_blockhash:
+                return result
+
+    except:
+        return None
+
 def get_token_balance_lamports(pub_key, token_address: str) -> int:
     try:
-
-        headers = {"accept": "application/json", "content-type": "application/json"}
+        headers = {"accept": "application/json",
+                   "content-type": "application/json"}
 
         payload = {
             "id": 1,
@@ -161,28 +221,43 @@ def get_token_balance_lamports(pub_key, token_address: str) -> int:
                 {"encoding": "jsonParsed"},
             ],
         }
+
+        response = requests.post(
+            CONFIG.SOLANA_RPC_END_POINT, json=payload, headers=headers)
         
-        response = requests.post(CONFIG.SOLANA_RPC_END_POINT, json=payload, headers=headers)
+        print(response.json())
+        
         amount = find_data(response.json(), "amount")
+
+        print(amount, type(amount))
+        
         return int(amount)
+    
     except:
         traceback.print_exc()
         return None
+
 
 def confirm_txn(client, txn_sig: Signature, max_retries: int = 10, retry_interval: int = 10) -> bool:
     try:
         retries = 0
         while retries < max_retries:
             try:
-                txn_res = client.get_transaction(txn_sig, encoding="json", commitment="confirmed", max_supported_transaction_version=0)
+                txn_res = client.get_transaction(
+                    txn_sig, encoding="json", commitment="confirmed", max_supported_transaction_version=0)
+                print(txn_res)
+                if txn_res is None:
+                    print("Transaction not found.")
+                    return False
+                
                 txn_json = json.loads(txn_res.value.transaction.meta.to_json())
 
                 print(txn_json)
-                
+
                 if txn_json['err'] is None:
                     print("Transaction confirmed... try count:", retries)
                     return True
-                
+
                 print("Error: Transaction not confirmed. Retrying...")
                 if txn_json['err']:
                     print("Transaction failed.")
@@ -192,26 +267,29 @@ def confirm_txn(client, txn_sig: Signature, max_retries: int = 10, retry_interva
                 print("Awaiting confirmation... try count:", retries)
                 retries += 1
                 time.sleep(retry_interval)
-        
+
         print("Max retries reached. Transaction confirmation failed.")
         return None
     except:
         return None
+
 
 def get_pair_address_from_rpc(client, token_address: str) -> str:
     BASE_OFFSET = 400
     QUOTE_OFFSET = 432
     DATA_LENGTH_FILTER = 752
     QUOTE_MINT = "So11111111111111111111111111111111111111112"
-    RAYDIUM_PROGRAM_ID = Pubkey.from_string("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8")
-    
+    RAYDIUM_PROGRAM_ID = Pubkey.from_string(
+        "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8")
+
     def fetch_amm_id(base_mint: str, quote_mint: str) -> str:
         memcmp_filter_base = MemcmpOpts(offset=BASE_OFFSET, bytes=base_mint)
         memcmp_filter_quote = MemcmpOpts(offset=QUOTE_OFFSET, bytes=quote_mint)
         try:
             response = client.get_program_accounts(
-                RAYDIUM_PROGRAM_ID, 
-                filters=[DATA_LENGTH_FILTER, memcmp_filter_base, memcmp_filter_quote]
+                RAYDIUM_PROGRAM_ID,
+                filters=[DATA_LENGTH_FILTER,
+                         memcmp_filter_base, memcmp_filter_quote]
             )
             accounts = response.value
             if accounts:
@@ -222,34 +300,31 @@ def get_pair_address_from_rpc(client, token_address: str) -> str:
 
     # First attempt: base_mint at BASE_OFFSET, QUOTE_MINT at QUOTE_OFFSET
     pair_address = fetch_amm_id(token_address, QUOTE_MINT)
-    
+
     # Second attempt: QUOTE_MINT at BASE_OFFSET, base_mint at QUOTE_OFFSET
     if not pair_address:
         pair_address = fetch_amm_id(QUOTE_MINT, token_address)
-    
+
     return pair_address
+
 
 def get_pair_address(token_address) -> str:
     try:
         url = f"https://api.dexscreener.com/latest/dex/search?q={token_address}"
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
-            "Accept": "*/*",
-            "Accept-Language": "en-US,en;q=0.5",
-            "Accept-Encoding": "gzip, deflate, br",
-            "Connection": "keep-alive",
-            "Sec-Fetch-Dest": "empty",
-            "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Site": "cross-site"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3",
         }
 
         response = requests.get(url, headers=headers)
+        print(response.text)
         if response.status_code == 200:
             return response.json()['pairs'][0]['pairAddress']
         else:
             return None
-    except:
+    except Exception as e:
+        print(f"Error fetching pair address: {e}")
         return None
+
 
 def get_token_price(client, pair_address: str) -> float:
     try:
@@ -257,7 +332,7 @@ def get_token_price(client, pair_address: str) -> float:
         amm_pubkey = Pubkey.from_string(pair_address)
         amm_data = client.get_account_info(amm_pubkey).value.data
         liquidity_state = LIQUIDITY_STATE_LAYOUT_V4.parse(amm_data)
-        
+
         # Extract relevant attributes with improved names
         amm_open_orders_pubkey = liquidity_state.ammOpenOrders
         pool_coin_token_account_pubkey = liquidity_state.poolCoinTokenAccount
@@ -265,7 +340,7 @@ def get_token_price(client, pair_address: str) -> float:
         coin_decimals = liquidity_state.coinDecimals
         pc_decimals = liquidity_state.pcDecimals
         coin_mint_address = liquidity_state.coinMintAddress
-         
+
         need_take_pnl_coin = liquidity_state.needTakePnlCoin
         need_take_pnl_pc = liquidity_state.needTakePnlPc
 
@@ -273,9 +348,12 @@ def get_token_price(client, pair_address: str) -> float:
         fetched_data = {}
         try:
             # Create threads for fetching account info and token balances
-            account_info_thread = threading.Thread(target=lambda: fetched_data.update({'open_orders_data': client.get_account_info(Pubkey.from_bytes(amm_open_orders_pubkey)).value.data}))
-            base_balance_thread = threading.Thread(target=lambda: fetched_data.update({pool_coin_token_account_pubkey: client.get_token_account_balance(Pubkey.from_bytes(pool_coin_token_account_pubkey)).value.ui_amount}))
-            quote_balance_thread = threading.Thread(target=lambda: fetched_data.update({pool_pc_token_account_pubkey: client.get_token_account_balance(Pubkey.from_bytes(pool_pc_token_account_pubkey)).value.ui_amount}))
+            account_info_thread = threading.Thread(target=lambda: fetched_data.update(
+                {'open_orders_data': client.get_account_info(Pubkey.from_bytes(amm_open_orders_pubkey)).value.data}))
+            base_balance_thread = threading.Thread(target=lambda: fetched_data.update(
+                {pool_coin_token_account_pubkey: client.get_token_account_balance(Pubkey.from_bytes(pool_coin_token_account_pubkey)).value.ui_amount}))
+            quote_balance_thread = threading.Thread(target=lambda: fetched_data.update(
+                {pool_pc_token_account_pubkey: client.get_token_account_balance(Pubkey.from_bytes(pool_pc_token_account_pubkey)).value.ui_amount}))
 
             # Start threads
             account_info_thread.start()
@@ -294,7 +372,7 @@ def get_token_price(client, pair_address: str) -> float:
         open_orders = OPEN_ORDERS_LAYOUT.parse(open_orders_data)
         base_token_total = open_orders.base_token_total
         quote_token_total = open_orders.quote_token_total
-        
+
         # Get decimal factors
         base_decimal = 10 ** coin_decimals
         quote_decimal = 10 ** pc_decimals
@@ -305,15 +383,17 @@ def get_token_price(client, pair_address: str) -> float:
 
         # Calculate token totals from open orders
         open_orders_base_token_total = base_token_total / base_decimal
-        open_orders_quote_token_total = quote_token_total/ quote_decimal
+        open_orders_quote_token_total = quote_token_total / quote_decimal
 
         # Get token balances from fetched data
         base_token_amount = fetched_data[pool_coin_token_account_pubkey]
         quote_token_amount = fetched_data[pool_pc_token_account_pubkey]
 
         # Calculate total token amounts
-        base = (base_token_amount or 0) + open_orders_base_token_total - base_pnl
-        quote = (quote_token_amount or 0) + open_orders_quote_token_total - quote_pnl
+        base = (base_token_amount or 0) + \
+            open_orders_base_token_total - base_pnl
+        quote = (quote_token_amount or 0) + \
+            open_orders_quote_token_total - quote_pnl
 
         # Determine price in SOL
         price_in_sol = 0
@@ -326,8 +406,10 @@ def get_token_price(client, pair_address: str) -> float:
 
     except:
         return None
-    
 
 
 if __name__ == '__main__':
-    print(get_token_balance('GPTKCGU7cq2ejWQq4trj2FhWW18icsGXsuojjFGoW4ZN', 'So11111111111111111111111111111111111111112'))
+    # print(get_token_balance('GPTKCGU7cq2ejWQq4trj2FhWW18icsGXsuojjFGoW4ZN', 'So11111111111111111111111111111111111111112'))
+    # print(get_token_balance_lamports('GPTKCGU7cq2ejWQq4trj2FhWW18icsGXsuojjFGoW4ZN',
+    #       'CUsEVhFGfjr2wwqjQFd7LrowYy6UhXY2HfAppUzTsihN'))
+    print(get_pair_address('6Hg8Rn92JFo8bs4UWMp8E5iZC9Uj7E5QQXcXi2p2vU3L'))
